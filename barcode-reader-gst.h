@@ -39,6 +39,8 @@ struct _GstBarcodeReader
 	guint uBarcodeFormats;
 	gboolean bEnableReader;
 	gboolean bShowLocation;
+	guint uCoiStartX;
+	guint uCoiWidth;
 	ZXing_ImageFormat eImageFormat;
 	ZXing_ReaderOptions* pOpts;
 	GArray* pBarcodes;

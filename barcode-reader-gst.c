@@ -13,6 +13,8 @@ enum
 	PROP_ENABLE_READER,
 	PROP_BARCODE_FORMATS,
 	PROP_SHOW_LOCATION,
+	PROP_COI_START_X,
+	PROP_COI_WIDTH,
 	PROP_LAST
 };
 
@@ -193,8 +195,14 @@ static GstFlowReturn gst_barcode_reader_transform_frame_ip (GstVideoFilter * vfi
 	if (filter->bEnableReader && filter->uBarcodeFormats != 0)
 	{
 		ZXing_ImageView* iv = ZXing_ImageView_new(pImage, filter->width, filter->height, filter->eImageFormat, 0, 0);
+
+		ZXing_ImageView_crop(iv, filter->uCoiStartX, 0, filter->uCoiWidth > 0 ? filter->uCoiWidth : filter->width - filter->uCoiStartX, 0);
+
 		ZXing_Barcodes* barcodes = ZXing_ReadBarcodes(iv, filter->pOpts);
 		
+		if (filter->uCoiStartX > 0 || (filter->uCoiWidth > 0 && filter->uCoiWidth != filter->width))
+			draw_column(pImage, filter->width, filter->height, filter->uCoiStartX, filter->uCoiStartX + filter->uCoiWidth - 1);
+
 		if (ZXing_Barcodes_size(barcodes))
 		{
 			GArray* pGstBarcodeList = g_array_new(FALSE, FALSE, sizeof(GstStructure*));
@@ -204,7 +212,15 @@ static GstFlowReturn gst_barcode_reader_transform_frame_ip (GstVideoFilter * vfi
 				const ZXing_Barcode* pBarcode = ZXing_Barcodes_at(barcodes, i);
 
 				if (filter->bShowLocation)
-					draw_quad(pImage, filter->width, filter->height, ZXing_Barcode_position(pBarcode));
+				{
+					ZXing_Position position = ZXing_Barcode_position(pBarcode);
+					position.bottomLeft.x += filter->uCoiStartX;
+					position.bottomRight.x += filter->uCoiStartX;
+					position.topLeft.x += filter->uCoiStartX;
+					position.topRight.x += filter->uCoiStartX;
+
+					draw_quad(pImage, filter->width, filter->height, position);
+				}
 			}
 
 			if ((currentTime - filter->prevBarcodeTime) >= 2)
@@ -291,6 +307,14 @@ static void gst_barcode_reader_set_property(GObject * object, guint prop_id, con
 		filter->bShowLocation = g_value_get_boolean(value);
 		break;
 
+	case PROP_COI_START_X:
+		filter->uCoiStartX = g_value_get_uint(value);
+		break;
+
+	case PROP_COI_WIDTH:
+		filter->uCoiWidth = g_value_get_uint(value);
+		break;
+
 	default:
 		G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
 		break;
@@ -317,6 +341,14 @@ static void gst_barcode_reader_get_property(GObject * object, guint prop_id, GVa
 
 	case PROP_SHOW_LOCATION:
 		g_value_set_boolean(value, filter->bShowLocation);
+		break;
+
+	case PROP_COI_START_X:
+		g_value_set_uint(value, filter->uCoiStartX);
+		break;
+
+	case PROP_COI_WIDTH:
+		g_value_set_uint(value, filter->uCoiWidth);
 		break;
 
 	default:
@@ -422,6 +454,30 @@ static void gst_barcode_reader_class_init (GstBarcodeReaderClass * klass)
 			TRUE,
 			G_PARAM_READWRITE));
 
+	g_object_class_install_property(
+		gobject_class,
+		PROP_COI_START_X,
+		g_param_spec_uint(
+			"coi-start-x",
+			"COI Start X",
+			"Starting x position of column of interest",
+			0,
+			UINT_MAX,
+			0,
+			G_PARAM_READWRITE));
+
+	g_object_class_install_property(
+		gobject_class,
+		PROP_COI_WIDTH,
+		g_param_spec_uint(
+			"coi-width",
+			"COI Width",
+			"Width of the column of interest",
+			0,
+			UINT_MAX,
+			0,
+			G_PARAM_READWRITE));
+
 	gst_barcode_reader_signals[BARCODE_SIGNAL] = g_signal_new(
 		"barcode-signal",                   // Signal name
 		G_TYPE_FROM_CLASS(klass),           // Signal owner type
@@ -467,6 +523,8 @@ static void gst_barcode_reader_init(GstBarcodeReader* filter)
 	filter->uBarcodeFormats = ZXing_BarcodeFormat_Any;
 	filter->bShowLocation = TRUE;
 	filter->bEnableReader = TRUE;
+	filter->uCoiStartX = 0;
+	filter->uCoiWidth = 0;
 	filter->pBarcodes = NULL;
 	filter->pOpts = NULL;
 	filter->prevBarcodeTime = 0;

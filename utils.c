@@ -128,6 +128,12 @@ void draw_quad(guint8* image, int width, int height, ZXing_Position position)
 	draw_line(image, width, height, position.bottomLeft.x, position.bottomLeft.y, position.bottomRight.x, position.bottomRight.y);
 }
 
+void draw_column(guint8* image, int width, int height, guint startX, guint endX)
+{
+	draw_line(image, width, height, startX, 0, startX, height - 1);
+	draw_line(image, width, height, endX, 0, endX, height - 1);
+}
+
 void utils_init(GstVideoFormat format)
 {
 	switch (format) {
